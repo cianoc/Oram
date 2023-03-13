@@ -148,13 +148,13 @@
                    end-freq (log end-freq 2)
                    table-vec))))
 
-/
+
 (defun gen-aaliased-wtable (start-keynum end-keynum semitones oversample partial-f)
   (create-aaliased-wtable start-keynum end-keynum semitones
                           (gen-partials (keynum->cps start-keynum) partial-f :vector t) oversample))
 
-(defparameter *saw-wave*
-  (gen-aaliased-wtable 21 127 3 4 (lambda (x) (/ (sample 1) x))))
+;;;(defparameter *saw-wave*
+;;;  (gen-aaliased-wtable 21 127 3 4 (lambda (x) (/ (sample 1) x))))
 
 (defun gen-square-wave (start-freq)
   (declare
@@ -254,27 +254,30 @@
 
 
 
-(defparameter *square-wave*
-  (gen-aaliased-wtable 21 127 3 4 (lambda (x) (if (oddp x) (/ (sample 1.0) x) (sample 0.0)))))
+;; (defparameter *square-wave*
+;;   (gen-aaliased-wtable 21 127 3 4 (lambda (x) (if (oddp x) (/ (sample 1.0) x) (sample 0.0)))))
 
-(defparameter *triangle-wave*
-  (gen-aaliased-wtable 21 127 3 4 (lambda (x) (if (oddp x) (/ (sample 1.0) (* x x)) (sample 0.0)))))
+;; (defparameter *triangle-wave*
+;;   (gen-aaliased-wtable 21 127 3 4 (lambda (x) (if (oddp x) (/ (sample 1.0) (* x x)) (sample 0.0)))))
 
 (define-vug-macro wosc (wtable freq amp phase)
-  (with-vug-inputs ((f freq)
-                    (a amp)
-                    (p phase))
-    `(with-samples ((inc (* ,f *sample-duration*))
-                    (curr-pos (init-only ,p)))
+  (with-vug-inputs ((fr freq)
+                    (am amp)
+                    (ph phase))
+    `(with-samples ((inc (* ,fr *sample-duration*))
+                    (curr-pos 0.0)
+                    (a ,am)
+                    (f ,fr)
+                    (p ,ph))
        (with ((bufs (ftable-bufs ,wtable))
               (max_idx (1- (length bufs))))
          (prog1
-             (* ,a (oscil-read-lin
+             (* a (oscil-read-lin
                 (aref (ftable-bufs ,wtable)
                       (min
-                       (ceiling (wtable--get-buf-num ,wtable ,f))
+                       (ceiling (wtable--get-buf-num ,wtable f))
                        max_idx))
-                (nth-value 1 (floor (+ ,p curr-pos)))))
+                (nth-value 1 (floor (+ p curr-pos)))))
       (setf curr-pos (nth-value 1 (floor (+ curr-pos inc )))))))))
 
 (define-vug wsquare (freq amp phase)
@@ -287,24 +290,31 @@
   (wosc *tri-wave* freq amp phase))
 
 (define-vug wpulse (freq amp phase width)
-  (+ (wsaw freq amp phase)
-     (wsaw freq amp (+ phase width))))
+  (with-samples ((f freq)
+                 (a amp)
+                 (p phase)
+                 (w width))
+    (- (wsaw f a p)
+       (wsaw f a (+ p (* w 0.5))))))
 
 
-(define-vug wsaw (freq amp phase)
-  (:defaults 440 1 0)
-  (with-samples ((inc (* freq *sample-duration*))
-                 (curr-pos (init-only phase)))
-    (with ((bufs (ftable-bufs *square-wave*))
-           (max_idx (1- (length bufs))))
-    (prog1
-        (* amp (oscil-read-lin
-                (aref (ftable-bufs *square-wave*)
-                      (min
-                       (ceiling (wtable--get-buf-num *square-wave* freq))
-                       max_idx))
-                (nth-value 1 (floor (+ phase curr-pos)))))
-      (setf curr-pos (nth-value 1 (floor (+ curr-pos inc ))))))))
+;; (define-vug wsaw (freq amp phase)
+;;   (:defaults 440 1 0)
+;;   (with-samples ((inc (* freq *sample-duration*))
+;;                  (curr-pos (init-only phase)))
+;;     (with ((bufs (ftable-bufs *square-wave*))
+;;            (max_idx (1- (length bufs))))
+;;     (prog1
+;;         (* amp (oscil-read-lin
+;;                 (aref (ftable-bufs *square-wave*)
+;;                       (min
+;;                        (ceiling (wtable--get-buf-num *square-wave* freq))
+;;                        max_idx))
+;;                 (nth-value 1 (floor (+ phase curr-pos)))))
+;;       (setf curr-pos (nth-value 1 (floor (+ curr-pos inc ))))))))
 
-(dsp! simple (freq amp width)
-  (out (wpulse freq amp 0 (+ 0.5 (* 0.2 (sine 3))))))
+(dsp! simple (freq amp phase width)
+  (out (wpulse freq amp phase width)))
+
+(dsp-debug simple2 (freq amp phase)
+  (out (wsquare freq amp phase)))
